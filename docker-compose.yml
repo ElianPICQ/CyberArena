@@ -20,7 +20,7 @@ services:
     environment:
       PORT: 8004
       MONGO_URI: mongodb://mongodb:27017/tp_jwt_mongodb
-      JWT_SECRET: secret
+      JWT_SECRET: tutrouverapas
       JWT_EXPIRES_IN: 365d
     depends_on:
       - mongodb
