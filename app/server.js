@@ -65,6 +65,9 @@ function adminRequired(req, res, next) {
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
 
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'Identifiants invalides :)' });
+  }
   // FAILLE NoSQL Injection volontaire : entrée utilisateur directement dans la requête.
   // Exemple pédagogique : username/password peuvent être des objets JSON.
   const user = await db.collection('users').findOne({ username, password });
