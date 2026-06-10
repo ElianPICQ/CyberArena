@@ -19,7 +19,7 @@ const upload = multer({
 });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 8004;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/tp_jwt_mongodb';
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';

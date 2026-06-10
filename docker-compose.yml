@@ -16,9 +16,9 @@ services:
     container_name: tp_node_app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8004:8004"
     environment:
-      PORT: 3000
+      PORT: 8004
       MONGO_URI: mongodb://mongodb:27017/tp_jwt_mongodb
       JWT_SECRET: secret
       JWT_EXPIRES_IN: 365d
