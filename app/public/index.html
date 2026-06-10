@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TP JWT + MongoDB vulnérable</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>UnsafeSite2026</h1>
+    <p>Application volontairement vulnérable pour lab pédagogique local.</p>
+  </header>
+
+  <main>
+    <section class="card" id="login-card">
+      <h2>Connexion</h2>
+      <form id="login-form">
+        <label>Nom utilisateur</label>
+        <input id="username" value="alice" />
+        <label>Mot de passe</label>
+        <input id="password" type="password" value="alice123" />
+        <button type="submit">Se connecter</button>
+      </form>
+      <p class="hint">Comptes : admin/admin123, alice/alice123, bob/bob123</p>
+    </section>
+
+    <section class="card" id="register-card">
+      <h2>Inscription</h2>
+      <form id="register-form">
+        <label>Nom utilisateur</label>
+        <input id="register-username" />
+        <label>Email</label>
+        <input id="register-email" type="email" />
+        <label>Mot de passe</label>
+        <input id="register-password" type="password" />
+        <button type="submit">Créer un compte</button>
+      </form>
+      <p class="hint">Après inscription, connectez-vous avec vos identifiants.</p>
+    </section>
+
+    <section class="card hidden" id="app-card">
+      <div class="toolbar">
+        <button onclick="loadMe()">Mon profil</button>
+        <button onclick="loadUsers()">Utilisateurs</button>
+        <button onclick="loadPosts(false)">Posts publics</button>
+        <button onclick="loadPosts(true)">Tous les posts ?</button>
+        <button onclick="showCreatePost()">Créer un post</button>
+        <button onclick="loadAdmin()">Admin</button>
+        <button onclick="showToken()">Voir JWT</button>
+        <button onclick="logout()">Déconnexion</button>
+      </div>
+
+      <section id="create-post-section" class="hidden">
+        <h2>Créer un post</h2>
+        <form id="post-form">
+          <input id="post-title" placeholder="Titre" />
+          <textarea id="post-content" placeholder="Votre message"></textarea>
+          <button type="submit">Publier</button>
+        </form>
+      </section>
+    </section>
+
+    <section class="card hidden" id="result-card">
+      <h2 id="result-title">Résultat</h2>
+      <div id="result"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
