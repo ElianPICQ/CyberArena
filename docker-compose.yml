@@ -4,7 +4,7 @@ services:
     container_name: tp_mongodb_green
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "27018:27018"
     environment:
       MONGO_INITDB_DATABASE: tp_jwt_mongodb
     volumes:
