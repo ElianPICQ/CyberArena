@@ -3,8 +3,6 @@ services:
     image: mongo:7
     container_name: tp_mongodb_green
     restart: unless-stopped
-    ports:
-      - "27018:27018"
     environment:
       MONGO_INITDB_DATABASE: tp_jwt_mongodb
     volumes:

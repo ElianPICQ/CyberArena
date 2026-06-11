@@ -6,6 +6,7 @@ const multer = require('multer');
 const { MongoClient, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const bcrypt = require('bcrypt');
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -15,13 +16,19 @@ const upload = multer({
       const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
       cb(null, name);
     }
-  })
+  }),
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+  limits: { fileSize: 2 * 1024 * 1024 }
 });
 
 const app = express();
 const PORT = 8004;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/tp_jwt_mongodb';
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
 
 let db;
@@ -33,37 +40,38 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 function signToken(user) {
-  // FAILLE JWT volontaire : rôle et données sensibles dans le token, secret faible.
-  return jwt.sign({
-    id: user._id.toString(),
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    isActive: user.isActive
-  }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign({ id: user._id.toString() }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
-function authRequired(req, res, next) {
+async function authRequired(req, res, next) {
+  const cookieHeader = req.headers.cookie || '';
+  const cookieMatch = cookieHeader.match(/(?:^|;\s*)token=([^;]+)/);
+  const cookieToken = cookieMatch ? cookieMatch[1] : null;
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const bearerToken = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = cookieToken || bearerToken;
   if (!token) return res.status(401).json({ error: 'Token manquant' });
 
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await db.collection('users').findOne(
+      { _id: new ObjectId(payload.id) },
+      { projection: { password: 0 } }
+    );
+    if (!user) return res.status(401).json({ error: 'Token invalide' });
+    req.user = { ...user, id: user._id.toString() };
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Token invalide' });
   }
 }
 
+function stripSpecial(str) {
+  return String(str ?? '').replace(/[<>&"']/g, '');
+}
+
 function adminRequired(req, res, next) {
-  // Correction faille
-  const user = await db.collection('users').findOne(
-    { _id: new ObjectId(req.user.id) },
-    { projection: { role: 1 } }
-  );
-  // FAILLE volontaire : confiance totale dans le rôle présent dans le JWT.
-  if (user && user.role === 'admin') return next();
+  if (req.user && req.user.role === 'admin') return next();
   return res.status(403).json({ error: 'Admin uniquement' });
 }
 
@@ -75,18 +83,17 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Identifiants invalides :)' });
   }
 
-  const match = await bcrypt.compare(password, user.password);
-  // FAILLE NoSQL Injection volontaire : entrée utilisateur directement dans la requête.
-  // Exemple pédagogique : username/password peuvent être des objets JSON.
-  const user = await db.collection('users').findOne({ username, match });
-
+  const user = await db.collection('users').findOne({ username });
   if (!user) return res.status(401).json({ error: 'Identifiants invalides' });
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.status(401).json({ error: 'Identifiants invalides' });
 
   const token = signToken(user);
 
   res.cookie('token', token, {
     httpOnly: true,
-    secure: true,         // HTTPS uniquement
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'Strict',
     maxAge: 365 * 24 * 60 * 60 * 1000
   });
@@ -105,6 +112,11 @@ app.post('/api/auth/login', async (req, res) => {
   });
 });
 
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('token', { httpOnly: true, sameSite: 'Strict' });
+  res.json({ message: 'Déconnecté' });
+});
+
 app.post('/api/auth/register', async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
@@ -113,16 +125,15 @@ app.post('/api/auth/register', async (req, res) => {
 
   const existing = await db.collection('users').findOne({ username });
   if (existing) {
-    return res.status(409).json({ error: 'Nom utilisateur déjà utilisé' });
+    return res.status(400).json({ error: 'Inscription impossible' });
   }
 
-  const bcrypt = require('bcrypt');
   const hashedPassword = await bcrypt.hash(password, 12);
 
   const user = {
     username,
     email,
-    hashedPassword,
+    password: hashedPassword,
     role: 'user',
     isActive: true,
     avatar: '/uploads/default.svg',
@@ -146,8 +157,7 @@ app.get('/api/me', authRequired, async (req, res) => {
   res.json(user);
 });
 
-app.get('/api/users', authRequired, async (req, res) => {
-  // FAILLE volontaire : tous les utilisateurs peuvent lister les profils.
+app.get('/api/users', authRequired, adminRequired, async (req, res) => {
   const users = await db.collection('users').find({}, { projection: { password: 0 } }).toArray();
   res.json(users);
 });
@@ -156,7 +166,6 @@ app.get('/api/users/:id', authRequired, async (req, res) => {
   if (req.user.id !== req.params.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Accès refusé' });
   }
-  // FAILLE IDOR / ObjectId enumeration volontaire : aucun contrôle propriétaire/admin.
   try {
     const user = await db.collection('users').findOne({ _id: new ObjectId(req.params.id) }, { projection: { password: 0 } });
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
@@ -181,7 +190,7 @@ app.put('/api/users/:id', authRequired, upload.single('avatar'), async (req, res
     if (req.file) {
       updates.avatar = `/uploads/${req.file.filename}`;
     }
-    if (req.body.password) updates.password = req.body.password;
+    if (req.body.password) updates.password = await bcrypt.hash(req.body.password, 12);
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'Aucune donnée à mettre à jour' });
@@ -202,7 +211,7 @@ app.put('/api/users/:id', authRequired, upload.single('avatar'), async (req, res
 
 app.get('/api/posts', authRequired, async (req, res) => {
   // FAILLE logique volontaire : un paramètre peut exposer les posts admin.
-  const includeAdmin = req.query.includeAdmin === 'true';
+  const includeAdmin = req.user.role === 'admin' && req.query.includeAdmin === 'true';
   const filter = includeAdmin ? {} : { visibility: 'public' };
   const posts = await db.collection('posts').aggregate([
     { $match: filter },
@@ -240,8 +249,8 @@ app.post('/api/posts', authRequired, async (req, res) => {
   if (!title || !content) return res.status(400).json({ error: 'Titre et contenu obligatoires' });
 
   const post = {
-    title,
-    content,
+    title: stripSpecial(title),
+    content: stripSpecial(content),
     authorId: new ObjectId(req.user.id),
     authorUsername: req.user.username,
     visibility: 'public',
@@ -262,8 +271,8 @@ app.put('/api/posts/:id', authRequired, async (req, res) => {
     }
 
     const updates = {};
-    if (req.body.title) updates.title = req.body.title;
-    if (req.body.content) updates.content = req.body.content;
+    if (req.body.title) updates.title = stripSpecial(req.body.title);
+    if (req.body.content) updates.content = stripSpecial(req.body.content);
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'Aucune donnée à mettre à jour' });
@@ -278,11 +287,10 @@ app.put('/api/posts/:id', authRequired, async (req, res) => {
 });
 
 app.get('/api/admin', authRequired, adminRequired, async (req, res) => {
-  const users = await db.collection('users').find({}).toArray();
+  const users = await db.collection('users').find({}, { projection: { password: 0 } }).toArray();
   const flags = await db.collection('flags').find({}).toArray();
   res.json({
     message: 'Bienvenue dans le panneau admin',
-    warning: 'Ce endpoint fait confiance au rôle contenu dans le JWT.',
     users,
     flags
   });

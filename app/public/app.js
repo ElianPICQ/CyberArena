@@ -1,16 +1,14 @@
-let token = localStorage.getItem('token');
 let currentUser = null;
 let currentPosts = [];
 let lastPostsIncludeAdmin = false;
 
 function authHeaders() {
-  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+  return { 'Content-Type': 'application/json' };
 }
 
 async function loadCurrentUser() {
-  if (!token) return null;
-  const res = await fetch('/api/me', { headers: authHeaders() });
-  if (!res.ok) return null;
+  const res = await fetch('/api/me');
+  if (!res.ok) { currentUser = null; return null; }
   currentUser = await res.json();
   return currentUser;
 }
@@ -31,7 +29,7 @@ function showResult(data) {
     } else {
       title.textContent = 'Résultat';
     }
-    result.textContent = data.map(item => renderItem(item)).join('');
+    result.innerHTML = data.map(item => renderItem(item)).join('');
   } else {
     if (data && data.title) {
       title.textContent = 'Post';
@@ -40,7 +38,7 @@ function showResult(data) {
     } else {
       title.textContent = 'Résultat';
     }
-    result.textContent = renderItem(data);
+    result.innerHTML = renderItem(data);
   }
 }
 
@@ -93,7 +91,7 @@ function renderPostActions(item) {
 
 function updateUi() {
   const registerCard = document.getElementById('register-card');
-  if (token) {
+  if (currentUser) {
     document.getElementById('login-card').classList.add('hidden');
     registerCard.classList.add('hidden');
     document.getElementById('app-card').classList.remove('hidden');
@@ -117,10 +115,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   });
   const data = await res.json();
   if (!res.ok) return showResult(data);
-  token = data.token;
-  localStorage.setItem('token', token);
-  updateUi();
   await loadCurrentUser();
+  updateUi();
   await loadPosts(false);
 });
 
@@ -186,17 +182,13 @@ async function loadAdmin() {
 }
 
 function showToken() {
-  const parts = token ? token.split('.') : [];
-  let decoded = null;
-  try { decoded = JSON.parse(atob(parts[1])); } catch(e) {}
-  showResult({ token, decodedPayload: decoded });
+  showResult({ message: 'Le token JWT est stocké dans un cookie httpOnly — inaccessible depuis JavaScript.' });
 }
 
-function logout() {
-  token = null;
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
   currentUser = null;
   currentPosts = [];
-  localStorage.removeItem('token');
   updateUi();
 }
 
@@ -208,7 +200,7 @@ function showProfileForm(user) {
   const isMe = currentUser && (currentUser._id === userId || currentUser.id === userId);
   title.textContent = isMe ? 'Mon profil' : `Profil ${user.username}`;
   document.getElementById('result-card').classList.remove('hidden');
-  result.textContent = `
+  result.innerHTML = `
     <form id="profile-form" enctype="multipart/form-data">
       <label>Nom utilisateur</label>
       <input id="profile-username" value="${user.username || ''}" />
@@ -255,7 +247,6 @@ async function saveProfile(e, userId) {
 
   const res = await fetch('/api/users/' + userId, {
     method: 'PUT',
-    headers: { 'Authorization': 'Bearer ' + token },
     body: formData
   });
   const data = await res.json();
@@ -285,7 +276,7 @@ function editPost(postId) {
   const result = document.getElementById('result');
   title.textContent = 'Modifier le post';
   document.getElementById('result-card').classList.remove('hidden');
-  result.textContent = `
+  result.innerHTML = `
     <form id="edit-post-form">
       <label>Titre</label>
       <input id="edit-post-title" value="${post.title || ''}" />
@@ -314,8 +305,4 @@ async function savePostEdit(e, postId) {
   }
 }
 
-if (token) {
-  loadCurrentUser();
-}
-
-updateUi();
+loadCurrentUser().then(() => updateUi());
