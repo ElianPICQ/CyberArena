@@ -31,7 +31,7 @@ function showResult(data) {
     } else {
       title.textContent = 'Résultat';
     }
-    result.innerHTML = data.map(item => renderItem(item)).join('');
+    result.textContent = data.map(item => renderItem(item)).join('');
   } else {
     if (data && data.title) {
       title.textContent = 'Post';
@@ -40,7 +40,7 @@ function showResult(data) {
     } else {
       title.textContent = 'Résultat';
     }
-    result.innerHTML = renderItem(data);
+    result.textContent = renderItem(data);
   }
 }
 
@@ -208,7 +208,7 @@ function showProfileForm(user) {
   const isMe = currentUser && (currentUser._id === userId || currentUser.id === userId);
   title.textContent = isMe ? 'Mon profil' : `Profil ${user.username}`;
   document.getElementById('result-card').classList.remove('hidden');
-  result.innerHTML = `
+  result.textContent = `
     <form id="profile-form" enctype="multipart/form-data">
       <label>Nom utilisateur</label>
       <input id="profile-username" value="${user.username || ''}" />
@@ -285,7 +285,7 @@ function editPost(postId) {
   const result = document.getElementById('result');
   title.textContent = 'Modifier le post';
   document.getElementById('result-card').classList.remove('hidden');
-  result.innerHTML = `
+  result.textContent = `
     <form id="edit-post-form">
       <label>Titre</label>
       <input id="edit-post-title" value="${post.title || ''}" />

@@ -57,24 +57,40 @@ function authRequired(req, res, next) {
 }
 
 function adminRequired(req, res, next) {
+  // Correction faille
+  const user = await db.collection('users').findOne(
+    { _id: new ObjectId(req.user.id) },
+    { projection: { role: 1 } }
+  );
   // FAILLE volontaire : confiance totale dans le rôle présent dans le JWT.
-  if (req.user && req.user.role === 'admin') return next();
+  if (user && user.role === 'admin') return next();
   return res.status(403).json({ error: 'Admin uniquement' });
 }
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
 
+  // Correction faille nosql
   if (typeof username !== 'string' || typeof password !== 'string') {
     return res.status(400).json({ error: 'Identifiants invalides :)' });
   }
+
+  const match = await bcrypt.compare(password, user.password);
   // FAILLE NoSQL Injection volontaire : entrée utilisateur directement dans la requête.
   // Exemple pédagogique : username/password peuvent être des objets JSON.
-  const user = await db.collection('users').findOne({ username, password });
+  const user = await db.collection('users').findOne({ username, match });
 
   if (!user) return res.status(401).json({ error: 'Identifiants invalides' });
 
   const token = signToken(user);
+
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: true,         // HTTPS uniquement
+    sameSite: 'Strict',
+    maxAge: 365 * 24 * 60 * 60 * 1000
+  });
+  
   res.json({
     message: 'Connexion réussie',
     token,
@@ -100,10 +116,13 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(409).json({ error: 'Nom utilisateur déjà utilisé' });
   }
 
+  const bcrypt = require('bcrypt');
+  const hashedPassword = await bcrypt.hash(password, 12);
+
   const user = {
     username,
     email,
-    password,
+    hashedPassword,
     role: 'user',
     isActive: true,
     avatar: '/uploads/default.svg',
@@ -134,6 +153,9 @@ app.get('/api/users', authRequired, async (req, res) => {
 });
 
 app.get('/api/users/:id', authRequired, async (req, res) => {
+  if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Accès refusé' });
+  }
   // FAILLE IDOR / ObjectId enumeration volontaire : aucun contrôle propriétaire/admin.
   try {
     const user = await db.collection('users').findOne({ _id: new ObjectId(req.params.id) }, { projection: { password: 0 } });
@@ -265,7 +287,7 @@ app.get('/api/admin', authRequired, adminRequired, async (req, res) => {
     flags
   });
 });
-
+/*
 app.get('/api/debug/config', async (req, res) => {
   // FAILLE info disclosure volontaire.
   res.json({
@@ -275,7 +297,7 @@ app.get('/api/debug/config', async (req, res) => {
     note: 'Endpoint debug volontairement exposé pour le TP.'
   });
 });
-
+*/
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 MongoClient.connect(MONGO_URI)
